@@ -31,14 +31,6 @@ npm start
 
 Open http://localhost:3000 in your browser.
 
-### Alternative: Python
-
-```bash
-python3 -m http.server 8000
-```
-
-Open http://localhost:8000.
-
 > **Why can't I just open `index.html`?**
 > Browsers block ES module `import` statements over the `file://` protocol. Any local HTTP server resolves this.
 
