@@ -1,0 +1,22 @@
+{
+  "name": "red-crab",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "npx serve . -l 3000 -s",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:unit": "vitest run --config vitest.config.js",
+    "test:e2e": "npx playwright test",
+    "test:all": "vitest run && npx playwright test"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "Red Crab - a Chrome dino-style endless runner browser game",
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "serve": "^14.2.6",
+    "vitest": "^4.0.18"
+  }
+}

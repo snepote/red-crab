@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Red Crab</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #1a1a2e;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      font-family: 'Courier New', monospace;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    #title {
+      color: #e94560;
+      font-size: 2rem;
+      font-weight: bold;
+      letter-spacing: 6px;
+      text-transform: uppercase;
+      margin-bottom: 20px;
+      text-shadow: 0 0 20px #e94560aa;
+    }
+
+    #gameWrapper {
+      position: relative;
+    }
+
+    canvas {
+      display: block;
+      border-radius: 8px;
+      box-shadow: 0 0 40px #e9456044, 0 0 80px #e9456022;
+    }
+
+    #hud {
+      position: absolute;
+      top: 16px;
+      right: 20px;
+      text-align: right;
+      pointer-events: none;
+    }
+
+    #score {
+      color: #e94560;
+      font-size: 1.4rem;
+      font-weight: bold;
+      letter-spacing: 2px;
+    }
+
+    #hi {
+      color: #ffffff44;
+      font-size: 0.85rem;
+      letter-spacing: 2px;
+      margin-top: 2px;
+    }
+
+    #hint {
+      color: #ffffff55;
+      font-size: 0.8rem;
+      margin-top: 14px;
+      letter-spacing: 1px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="title">RED CRAB</div>
+
+  <div id="gameWrapper">
+    <canvas id="c"></canvas>
+    <div id="hud">
+      <div id="score">00000</div>
+      <div id="hi">HI 00000</div>
+    </div>
+  </div>
+
+  <div id="hint">SPACE / TAP to jump &nbsp;·&nbsp; Double jump allowed</div>
+
+  <script type="module">
+  import {
+    CANVAS_W, CANVAS_H, GROUND, STATE,
+    formatScore, createGameState, updateParticles,
+  } from './game.js';
+
+  (() => {
+    // ─── Canvas setup ────────────────────────────────────────────────────────
+    const canvas = document.getElementById('c');
+    const ctx    = canvas.getContext('2d');
+    const W = CANVAS_W, H = CANVAS_H;
+    canvas.width  = W;
+    canvas.height = H;
+
+    // ─── HUD elements ────────────────────────────────────────────────────────
+    const scoreEl = document.getElementById('score');
+    const hiEl    = document.getElementById('hi');
+
+    // ─── Game state (all logic lives in game.js) ─────────────────────────────
+    const game = createGameState();
+    const crab = game.crab;
+
+    // ─── Obstacle draw functions (visual only) ───────────────────────────────
+    const obstacleDrawers = {
+      0: drawRock,
+      1: drawSeaweed,
+      2: drawShell,
+      3: drawCoral,
+      4: drawLlama,
+      5: drawElephant,
+    };
+
+    // Each obstacle stores its own phase/state for animation
+    const obstacleAnimState = new WeakMap();
+
+    function getAnimState(obs) {
+      if (!obstacleAnimState.has(obs)) {
+        obstacleAnimState.set(obs, {
+          phase: Math.random() * Math.PI * 2,
+          legPhase: Math.random() * Math.PI * 2,
+          trunkWave: 0,
+        });
+      }
+      return obstacleAnimState.get(obs);
+    }
+
+    function drawRock(obs) {
+      ctx.fillStyle = '#7f8c8d';
+      ctx.beginPath();
+      ctx.roundRect(obs.x - 10, GROUND - 24, 20, 24, 4);
+      ctx.fill();
+      ctx.fillStyle = '#95a5a6';
+      ctx.beginPath();
+      ctx.roundRect(obs.x + 4, GROUND - 18, 14, 18, 3);
+      ctx.fill();
+      ctx.fillStyle = '#636e72';
+      ctx.beginPath();
+      ctx.roundRect(obs.x - 16, GROUND - 16, 16, 16, 3);
+      ctx.fill();
+    }
+
+    function drawSeaweed(obs) {
+      const anim = getAnimState(obs);
+      anim.phase += 0.04;
+      ctx.strokeStyle = '#27ae60';
+      ctx.lineWidth = 5;
+      ctx.lineCap = 'round';
+      for (let i = 0; i < 3; i++) {
+        const ox = (i - 1) * 9;
+        const h  = 28 + i * 6;
+        ctx.beginPath();
+        ctx.moveTo(obs.x + ox, GROUND);
+        ctx.bezierCurveTo(
+          obs.x + ox + Math.sin(anim.phase + i) * 8, GROUND - h * 0.4,
+          obs.x + ox - Math.sin(anim.phase + i + 1) * 8, GROUND - h * 0.7,
+          obs.x + ox + Math.sin(anim.phase + i + 2) * 5, GROUND - h
+        );
+        ctx.stroke();
+      }
+    }
+
+    function drawShell(obs) {
+      ctx.fillStyle = '#f39c12';
+      ctx.beginPath();
+      ctx.ellipse(obs.x, GROUND - 10, 16, 10, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#e67e22';
+      ctx.lineWidth = 1.5;
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * Math.PI;
+        ctx.beginPath();
+        ctx.moveTo(obs.x, GROUND - 10);
+        ctx.lineTo(obs.x + Math.cos(a) * 15, GROUND - 10 + Math.sin(a) * -9);
+        ctx.stroke();
+      }
+      ctx.strokeStyle = '#d35400';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(obs.x, GROUND - 10, 16, 10, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    function drawCoral(obs) {
+      ctx.fillStyle = '#e74c3c';
+      ctx.beginPath();
+      ctx.roundRect(obs.x - 5, GROUND - 50, 10, 50, 5);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.roundRect(obs.x - 18, GROUND - 36, 14, 8, 4);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.roundRect(obs.x - 18, GROUND - 50, 8, 16, 4);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.roundRect(obs.x + 4, GROUND - 28, 14, 8, 4);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.roundRect(obs.x + 10, GROUND - 44, 8, 18, 4);
+      ctx.fill();
+      ctx.fillStyle = '#ff6b6b';
+      ctx.beginPath();
+      ctx.arc(obs.x, GROUND - 50, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(obs.x - 18, GROUND - 50, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(obs.x + 18, GROUND - 44, 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function drawLlama(obs) {
+      const anim = getAnimState(obs);
+      anim.legPhase += 0.18;
+      const bx = obs.x, by = GROUND;
+      const t = anim.legPhase;
+
+      ctx.strokeStyle = '#8d6e63';
+      ctx.lineWidth = 4;
+      ctx.lineCap = 'round';
+      const legPairs = [
+        { ox: -12, phase: 0 },
+        { ox: -4,  phase: Math.PI * 0.5 },
+        { ox:  6,  phase: Math.PI },
+        { ox:  14, phase: Math.PI * 1.5 },
+      ];
+      for (const lp of legPairs) {
+        const swing = Math.sin(t + lp.phase) * 4;
+        ctx.beginPath();
+        ctx.moveTo(bx + lp.ox, by - 18);
+        ctx.lineTo(bx + lp.ox + swing, by);
+        ctx.stroke();
+      }
+
+      ctx.fillStyle = '#c8a882';
+      ctx.beginPath();
+      ctx.ellipse(bx, by - 28, 22, 14, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#c8a882';
+      ctx.beginPath();
+      ctx.moveTo(bx + 10, by - 36);
+      ctx.lineTo(bx + 16, by - 60);
+      ctx.lineTo(bx + 24, by - 58);
+      ctx.lineTo(bx + 18, by - 34);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = '#d4b896';
+      ctx.beginPath();
+      ctx.ellipse(bx + 22, by - 63, 11, 9, -0.2, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#c8a882';
+      ctx.beginPath();
+      ctx.ellipse(bx + 31, by - 61, 7, 5, 0.3, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#9e7b5a';
+      ctx.beginPath();
+      ctx.ellipse(bx + 35, by - 62, 2, 1.5, 0.3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(bx + 33, by - 59, 2, 1.5, 0.3, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#3e2723';
+      ctx.beginPath();
+      ctx.arc(bx + 26, by - 66, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(bx + 27, by - 67, 0.9, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#c8a882';
+      ctx.beginPath();
+      ctx.moveTo(bx + 17, by - 70);
+      ctx.lineTo(bx + 14, by - 80);
+      ctx.lineTo(bx + 21, by - 72);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#f4a5a5';
+      ctx.beginPath();
+      ctx.moveTo(bx + 17, by - 70);
+      ctx.lineTo(bx + 15, by - 78);
+      ctx.lineTo(bx + 20, by - 72);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = '#e8d5c0';
+      for (let i = 0; i < 5; i++) {
+        ctx.beginPath();
+        ctx.arc(bx + 12 + i * 2, by - 44 - i * 3, 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.fillStyle = '#e8d5c0';
+      ctx.beginPath();
+      ctx.arc(bx - 20, by - 30, 5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function drawElephant(obs) {
+      const anim = getAnimState(obs);
+      anim.legPhase += 0.14;
+      anim.trunkWave += 0.09;
+      const S = 0.62;
+      const bx = obs.x, by = GROUND;
+      const t = anim.legPhase;
+
+      ctx.save();
+      ctx.globalAlpha = 0.18;
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.ellipse(bx + S * 10, by + 3, 44 * S, 6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      ctx.save();
+      ctx.translate(bx, by);
+      ctx.scale(S, S);
+
+      ctx.fillStyle = '#e991b8';
+      const legs = [-28, -10, 10, 28];
+      for (let i = 0; i < 4; i++) {
+        const swing = Math.sin(t + i * Math.PI * 0.5) * 3;
+        ctx.beginPath();
+        ctx.roundRect(legs[i] - 7, -32 + swing, 14, 32 - swing, [0, 0, 6, 6]);
+        ctx.fill();
+        ctx.fillStyle = '#d4679a';
+        ctx.beginPath();
+        ctx.ellipse(legs[i], 1, 9, 5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#e991b8';
+      }
+
+      const bodyGrad = ctx.createRadialGradient(-10, -60, 5, 0, -55, 45);
+      bodyGrad.addColorStop(0, '#f4aecf');
+      bodyGrad.addColorStop(0.6, '#e991b8');
+      bodyGrad.addColorStop(1, '#c4608e');
+      ctx.fillStyle = bodyGrad;
+      ctx.beginPath();
+      ctx.ellipse(0, -55, 40, 34, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      const headGrad = ctx.createRadialGradient(25, -82, 3, 30, -78, 26);
+      headGrad.addColorStop(0, '#f9c8e0');
+      headGrad.addColorStop(1, '#e07aac');
+      ctx.fillStyle = headGrad;
+      ctx.beginPath();
+      ctx.ellipse(30, -78, 25, 22, 0.1, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = '#e07aac';
+      ctx.lineWidth = 10;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      const tw = Math.sin(anim.trunkWave) * 10;
+      ctx.moveTo(52, -72);
+      ctx.bezierCurveTo(66, -60, 60 + tw, -40, 50 + tw * 1.5, -22);
+      ctx.stroke();
+      ctx.fillStyle = '#d4679a';
+      ctx.beginPath();
+      ctx.ellipse(50 + tw * 1.5, -22, 7, 5, 0.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#e991b8cc';
+      ctx.beginPath();
+      ctx.ellipse(6, -72, 16, 22, -0.4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#f4aecf55';
+      ctx.beginPath();
+      ctx.ellipse(8, -72, 10, 15, -0.4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#e991b8cc';
+      ctx.beginPath();
+      ctx.ellipse(54, -74, 14, 20, 0.4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#f9c8e055';
+      ctx.beginPath();
+      ctx.ellipse(53, -74, 9, 13, 0.4, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#2c1810';
+      ctx.beginPath();
+      ctx.arc(42, -83, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(43.5, -84.5, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#2c1810';
+      ctx.lineWidth = 1;
+      for (let i = 0; i < 4; i++) {
+        const a = -Math.PI * 0.8 + i * 0.2;
+        ctx.beginPath();
+        ctx.moveTo(42 + Math.cos(a) * 4, -83 + Math.sin(a) * 4);
+        ctx.lineTo(42 + Math.cos(a) * 7, -83 + Math.sin(a) * 7);
+        ctx.stroke();
+      }
+
+      ctx.strokeStyle = '#d4679a';
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(-38, -58);
+      ctx.quadraticCurveTo(-50, -48, -44, -36);
+      ctx.stroke();
+      ctx.fillStyle = '#f4aecf';
+      ctx.beginPath();
+      ctx.arc(-44, -36, 5, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+
+      ctx.save();
+      ctx.font = 'bold 9px Courier New';
+      ctx.fillStyle = '#ff69b4';
+      ctx.textAlign = 'center';
+      ctx.shadowColor = '#ff69b4';
+      ctx.shadowBlur = 6;
+      ctx.fillText('\uD83D\uDC18 baby!', bx + S * 10, by - 68);
+      ctx.restore();
+    }
+
+    function drawObstacle(obs) {
+      const drawer = obstacleDrawers[obs.type];
+      if (drawer) drawer(obs);
+    }
+
+    // ─── Crab drawing ─────────────────────────────────────────────────────────
+    function drawCrab() {
+      const cx = crab.x, cy = crab.y, t = crab.legPhase;
+      const onGround = crab.y >= GROUND - 1;
+
+      // Shadow
+      ctx.save();
+      ctx.globalAlpha = 0.25;
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.ellipse(cx, GROUND + 6, 20, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      // Legs
+      const legColor = crab.dead ? '#8b1a1a' : '#c0392b';
+      ctx.strokeStyle = legColor;
+      ctx.lineWidth = 2.5;
+      ctx.lineCap = 'round';
+
+      const legDefs = [
+        { ox: -10, angle: -0.9, phase: 0   },
+        { ox:   0, angle: -1.0, phase: 0.4 },
+        { ox:  10, angle: -1.1, phase: 0.8 },
+      ];
+
+      for (const side of [-1, 1]) {
+        for (const leg of legDefs) {
+          const swing = onGround ? Math.sin(t + leg.phase) * 0.3 : 0.2 * side;
+          const baseX = cx + leg.ox;
+          const baseY = cy - 10;
+          const kx = baseX + side * 14 * Math.cos(swing);
+          const ky = baseY + 10 + Math.abs(Math.sin(swing)) * 4;
+          const ex = baseX + side * 26 * Math.cos(swing + 0.3);
+          const ey = onGround ? cy + 1 : ky + 8;
+
+          ctx.beginPath();
+          ctx.moveTo(baseX, baseY);
+          ctx.quadraticCurveTo(kx, ky, ex, ey);
+          ctx.stroke();
+        }
+      }
+
+      // Claws
+      const clawColor = crab.dead ? '#6b1111' : '#a93226';
+      ctx.fillStyle = clawColor;
+      for (const side of [-1, 1]) {
+        const clawSwing = onGround ? Math.sin(t * 0.7) * 0.15 : 0;
+        const cx2 = cx + side * 26;
+        const cy2 = cy - 16 + Math.sin(clawSwing) * 3;
+        ctx.strokeStyle = legColor;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(cx + side * 18, cy - 14);
+        ctx.lineTo(cx2, cy2);
+        ctx.stroke();
+        ctx.fillStyle = clawColor;
+        ctx.beginPath();
+        ctx.ellipse(cx2, cy2, 8, 6, side * 0.3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = crab.dead ? '#5a0e0e' : '#922b21';
+        ctx.beginPath();
+        ctx.ellipse(cx2 + side * 5, cy2 - 4, 5, 3.5, side * 0.6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(cx2 + side * 5, cy2 + 3, 5, 3.5, side * -0.6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Shell
+      const shellColor = crab.dead
+        ? ctx.createRadialGradient(cx, cy-14, 2, cx, cy-14, 22)
+        : ctx.createRadialGradient(cx-5, cy-18, 2, cx, cy-14, 22);
+
+      if (!crab.dead) {
+        shellColor.addColorStop(0, '#ff6b6b');
+        shellColor.addColorStop(0.5, '#e94560');
+        shellColor.addColorStop(1, '#922b21');
+      } else {
+        shellColor.addColorStop(0, '#8b2222');
+        shellColor.addColorStop(1, '#4a0e0e');
+      }
+
+      ctx.fillStyle = shellColor;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy - 14, 20, 16, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Shell pattern
+      ctx.strokeStyle = crab.dead ? '#6b111188' : '#c0392b88';
+      ctx.lineWidth = 1;
+      for (let i = -1; i <= 1; i++) {
+        ctx.beginPath();
+        ctx.moveTo(cx + i * 7, cy - 28);
+        ctx.quadraticCurveTo(cx + i * 10, cy - 14, cx + i * 7, cy - 2);
+        ctx.stroke();
+      }
+      ctx.beginPath();
+      ctx.ellipse(cx, cy - 14, 20, 8, 0, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Eyes
+      const eyeStalkY = cy - 30;
+      for (const side of [-1, 1]) {
+        const ex = cx + side * 9;
+        ctx.strokeStyle = legColor;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(cx + side * 7, cy - 28);
+        ctx.lineTo(ex, eyeStalkY);
+        ctx.stroke();
+        ctx.fillStyle = crab.dead ? '#555' : '#fff';
+        ctx.beginPath();
+        ctx.arc(ex, eyeStalkY, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = crab.dead ? '#222' : '#1a1a2e';
+        ctx.beginPath();
+        const px = crab.dead ? ex : ex + side * 1.5;
+        ctx.arc(px, eyeStalkY + 1, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+        if (!crab.dead) {
+          ctx.fillStyle = '#fff';
+          ctx.beginPath();
+          ctx.arc(px + 1, eyeStalkY - 1, 1, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      // Mouth
+      ctx.strokeStyle = crab.dead ? '#4a0e0e' : '#7b241c';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      if (crab.dead) {
+        ctx.moveTo(cx - 5, cy - 7);
+        ctx.lineTo(cx + 5, cy - 7);
+      } else {
+        ctx.arc(cx, cy - 6, 5, 0.1, Math.PI - 0.1);
+      }
+      ctx.stroke();
+
+      // Crown
+      const crownBaseY = eyeStalkY - 7;
+      const crownW = 22, crownH = 13;
+      const crownX = cx - crownW / 2;
+
+      ctx.save();
+      ctx.shadowColor = crab.dead ? '#00000000' : '#ffd70088';
+      ctx.shadowBlur  = 10;
+
+      const crownGrad = ctx.createLinearGradient(crownX, crownBaseY - crownH, crownX, crownBaseY);
+      if (!crab.dead) {
+        crownGrad.addColorStop(0, '#ffe566');
+        crownGrad.addColorStop(0.5, '#f5c518');
+        crownGrad.addColorStop(1, '#c8940a');
+      } else {
+        crownGrad.addColorStop(0, '#8a7a30');
+        crownGrad.addColorStop(1, '#5a4e10');
+      }
+
+      ctx.beginPath();
+      ctx.moveTo(crownX, crownBaseY);
+      ctx.lineTo(crownX, crownBaseY - crownH * 0.55);
+      ctx.lineTo(crownX + crownW * 0.16, crownBaseY - crownH);
+      ctx.lineTo(crownX + crownW * 0.32, crownBaseY - crownH * 0.5);
+      ctx.lineTo(cx, crownBaseY - crownH - 4);
+      ctx.lineTo(crownX + crownW * 0.68, crownBaseY - crownH * 0.5);
+      ctx.lineTo(crownX + crownW * 0.84, crownBaseY - crownH);
+      ctx.lineTo(crownX + crownW, crownBaseY - crownH * 0.55);
+      ctx.lineTo(crownX + crownW, crownBaseY);
+      ctx.closePath();
+      ctx.fillStyle = crownGrad;
+      ctx.fill();
+
+      ctx.strokeStyle = crab.dead ? '#6b5a10' : '#a07800';
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+      ctx.restore();
+
+      ctx.fillStyle = crab.dead ? '#6b5a10' : '#c8940a';
+      ctx.fillRect(crownX, crownBaseY - 5, crownW, 5);
+      ctx.strokeStyle = crab.dead ? '#5a4e10' : '#a07800';
+      ctx.lineWidth = 0.8;
+      ctx.strokeRect(crownX, crownBaseY - 5, crownW, 5);
+
+      const jewels = [
+        { rx: cx,              color: crab.dead ? '#554' : '#e94560', r: 2.8 },
+        { rx: cx - crownW * 0.28, color: crab.dead ? '#334' : '#4fc3f7', r: 2 },
+        { rx: cx + crownW * 0.28, color: crab.dead ? '#334' : '#69f0ae', r: 2 },
+      ];
+      for (const j of jewels) {
+        ctx.fillStyle = j.color;
+        ctx.beginPath();
+        ctx.arc(j.rx, crownBaseY - 2.5, j.r, 0, Math.PI * 2);
+        ctx.fill();
+        if (!crab.dead) {
+          ctx.fillStyle = '#ffffffaa';
+          ctx.beginPath();
+          ctx.arc(j.rx - 0.8, crownBaseY - 3.5, j.r * 0.4, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+
+    // ─── Background ───────────────────────────────────────────────────────────
+    const bgStars = Array.from({ length: 60 }, () => ({
+      x: Math.random() * W,
+      y: Math.random() * (H * 0.65),
+      r: Math.random() * 1.5 + 0.3,
+      a: Math.random() * 0.6 + 0.1,
+    }));
+
+    const bgBubbles = Array.from({ length: 12 }, () => ({
+      x: Math.random() * W,
+      y: Math.random() * GROUND,
+      r: Math.random() * 8 + 3,
+      vy: -(Math.random() * 0.3 + 0.1),
+      a: Math.random() * 0.15 + 0.05,
+    }));
+
+    function drawBackground() {
+      const grad = ctx.createLinearGradient(0, 0, 0, H);
+      grad.addColorStop(0, '#0d0d1a');
+      grad.addColorStop(1, '#1a1a3e');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, W, H);
+
+      for (const s of bgStars) {
+        ctx.globalAlpha = s.a;
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+
+      for (const b of bgBubbles) {
+        if (game.state === STATE.RUNNING) {
+          b.y += b.vy;
+          if (b.y < -10) { b.y = GROUND; b.x = Math.random() * W; }
+        }
+        ctx.globalAlpha = b.a;
+        ctx.strokeStyle = '#6ea8fe';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    function drawGround() {
+      const gGrad = ctx.createLinearGradient(0, GROUND, 0, H);
+      gGrad.addColorStop(0, '#2c3e6e');
+      gGrad.addColorStop(1, '#1a2540');
+      ctx.fillStyle = gGrad;
+      ctx.fillRect(0, GROUND, W, H - GROUND);
+
+      ctx.strokeStyle = '#3d5a8a';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, GROUND);
+      ctx.lineTo(W, GROUND);
+      ctx.stroke();
+
+      ctx.strokeStyle = '#2a3f6b';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([8, 12]);
+      ctx.beginPath();
+      ctx.moveTo(0, GROUND + 8);
+      ctx.lineTo(W, GROUND + 8);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      const pebbleSeeds = [60, 130, 220, 310, 400, 490, 580, 670, 740];
+      for (const px of pebbleSeeds) {
+        ctx.fillStyle = '#3d5a8a';
+        ctx.beginPath();
+        ctx.ellipse(px, GROUND + 14, 5, 3, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function drawOverlay() {
+      if (game.state === STATE.IDLE) {
+        ctx.fillStyle = 'rgba(0,0,0,0.45)';
+        ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 1.1rem Courier New';
+        ctx.textAlign = 'center';
+        ctx.fillText('PRESS SPACE or TAP to start', W / 2, H / 2 - 10);
+        ctx.fillStyle = '#ffffff88';
+        ctx.font = '0.8rem Courier New';
+        ctx.fillText('double jump allowed', W / 2, H / 2 + 16);
+        ctx.textAlign = 'left';
+      }
+
+      if (game.state === STATE.DEAD) {
+        ctx.fillStyle = 'rgba(0,0,0,0.55)';
+        ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = '#e94560';
+        ctx.font = 'bold 1.6rem Courier New';
+        ctx.textAlign = 'center';
+        ctx.fillText('GAME OVER', W / 2, H / 2 - 18);
+        ctx.fillStyle = '#fff';
+        ctx.font = '0.95rem Courier New';
+        ctx.fillText('PRESS SPACE or TAP to restart', W / 2, H / 2 + 14);
+        ctx.textAlign = 'left';
+      }
+    }
+
+    // ─── Particles drawing ────────────────────────────────────────────────────
+    function drawParticles() {
+      for (const p of game.particles) {
+        ctx.globalAlpha = p.life;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r * p.life, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // ─── Input ────────────────────────────────────────────────────────────────
+    document.addEventListener('keydown', e => {
+      if (e.code === 'Space' || e.code === 'ArrowUp') {
+        e.preventDefault();
+        game.handleInput();
+      }
+    });
+
+    canvas.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      game.handleInput();
+    });
+
+    // ─── Main loop ────────────────────────────────────────────────────────────
+    function loop() {
+      ctx.clearRect(0, 0, W, H);
+      drawBackground();
+      drawGround();
+
+      if (game.state === STATE.RUNNING) {
+        game.tick();
+      }
+
+      // Draw obstacles
+      for (const obs of game.obstacles) {
+        drawObstacle(obs);
+      }
+
+      drawParticles();
+      drawCrab();
+      drawOverlay();
+
+      // HUD
+      scoreEl.textContent = formatScore(game.score);
+      hiEl.textContent    = 'HI ' + formatScore(game.hiScore);
+
+      requestAnimationFrame(loop);
+    }
+
+    loop();
+  })();
+  </script>
+</body>
+</html>
