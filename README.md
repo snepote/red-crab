@@ -1,5 +1,7 @@
 # Red Crab
 
+[![CI](https://github.com/snepote/red-crab/actions/workflows/ci.yml/badge.svg)](https://github.com/snepote/red-crab/actions/workflows/ci.yml)
+
 A Chrome dino-style endless runner browser game. You play as a crowned crab running along the ocean floor, jumping over obstacles to survive as long as possible.
 
 **Play it live:** [red-crab.nepoteidea.com](https://red-crab.nepoteidea.com/)
