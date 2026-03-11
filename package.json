@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "start": "npx serve . -l 3000 -s",
+    "start": "serve . -l 3000 -s",
     "build": "mkdir -p dist && cp index.html game.js dist/",
-    "deploy": "npm run build && npx wrangler deploy",
-    "preview": "npm run build && npx wrangler dev",
+    "deploy": "wrangler deploy",
+    "preview": "wrangler dev",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:unit": "vitest run --config vitest.config.js",
@@ -20,6 +20,7 @@
   "devDependencies": {
     "@playwright/test": "^1.58.2",
     "serve": "^14.2.6",
-    "vitest": "^4.0.18"
+    "vitest": "^4.0.18",
+    "wrangler": "^4.72.0"
   }
 }
