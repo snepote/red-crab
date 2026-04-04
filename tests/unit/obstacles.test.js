@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   pickObstacleType,
   getObstacleRect,
+  getBeerRect,
   GROUND,
   OBSTACLE_TYPE_COUNT,
 } from '../../game.js';
@@ -102,6 +103,26 @@ describe('getObstacleRect', () => {
   it('accepts custom ground parameter', () => {
     const customGround = 100;
     const r = getObstacleRect(0, x, customGround);
+    expect(r.y + r.h).toBe(customGround);
+  });
+});
+
+describe('getBeerRect', () => {
+  const x = 400;
+
+  it('returns correct dimensions for beer bottle', () => {
+    const r = getBeerRect(x);
+    expect(r).toEqual({ x: x - 9, y: GROUND - 40, w: 18, h: 40 });
+  });
+
+  it('bottom edge sits on the ground', () => {
+    const r = getBeerRect(x);
+    expect(r.y + r.h).toBe(GROUND);
+  });
+
+  it('accepts custom ground parameter', () => {
+    const customGround = 100;
+    const r = getBeerRect(x, customGround);
     expect(r.y + r.h).toBe(customGround);
   });
 });

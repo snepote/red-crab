@@ -6,6 +6,9 @@ import {
   GROUND,
   CANVAS_W,
   rectsOverlap,
+  BEER_SLOW_DURATION,
+  BEER_SLOW_FACTOR,
+  getBeerRect,
 } from '../../game.js';
 
 describe('Game State Machine', () => {
@@ -272,5 +275,193 @@ describe('STATE constants', () => {
 
   it('is frozen (immutable)', () => {
     expect(Object.isFrozen(STATE)).toBe(true);
+  });
+});
+
+describe('Beer power-up (slow motion)', () => {
+  let game;
+
+  beforeEach(() => {
+    game = createGameState();
+    game.handleInput(); // start game
+  });
+
+  it('starts with empty collectibles and zero beerTimer', () => {
+    expect(game.collectibles).toHaveLength(0);
+    expect(game.beerTimer).toBe(0);
+  });
+
+  it('spawns a beer bottle when nextCollectible reaches 0', () => {
+    game.nextCollectible = 1;
+    game.nextObstacle = 999;
+    game.tick();
+    expect(game.collectibles.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('beer bottles spawn off-screen to the right', () => {
+    game.nextCollectible = 1;
+    game.nextObstacle = 999;
+    game.tick();
+    const c = game.collectibles[0];
+    // Spawned at CANVAS_W + 50, then moved left by speed
+    expect(c.x).toBe(CANVAS_W + 50 - game.speed);
+  });
+
+  it('beer bottles have a rect getter', () => {
+    game.nextCollectible = 1;
+    game.nextObstacle = 999;
+    game.tick();
+    const c = game.collectibles[0];
+    const r = c.rect;
+    expect(r).toHaveProperty('x');
+    expect(r).toHaveProperty('y');
+    expect(r).toHaveProperty('w');
+    expect(r).toHaveProperty('h');
+  });
+
+  it('collecting a beer bottle sets beerTimer to BEER_SLOW_DURATION', () => {
+    // Place a beer bottle right on top of the crab
+    const crabRect = game.crab.rect;
+    game.collectibles.push({
+      x: game.crab.x,
+      get rect() {
+        return { x: crabRect.x, y: crabRect.y, w: crabRect.w, h: crabRect.h };
+      },
+    });
+    game.nextObstacle = 999;
+    game.nextCollectible = 999;
+    game.tick();
+    expect(game.beerTimer).toBe(BEER_SLOW_DURATION);
+  });
+
+  it('collecting a beer bottle removes it from collectibles', () => {
+    const crabRect = game.crab.rect;
+    game.collectibles.push({
+      x: game.crab.x,
+      get rect() {
+        return { x: crabRect.x, y: crabRect.y, w: crabRect.w, h: crabRect.h };
+      },
+    });
+    game.nextObstacle = 999;
+    game.nextCollectible = 999;
+    game.tick();
+    expect(game.collectibles).toHaveLength(0);
+  });
+
+  it('collecting a beer does not kill the crab', () => {
+    const crabRect = game.crab.rect;
+    game.collectibles.push({
+      x: game.crab.x,
+      get rect() {
+        return { x: crabRect.x, y: crabRect.y, w: crabRect.w, h: crabRect.h };
+      },
+    });
+    game.nextObstacle = 999;
+    game.nextCollectible = 999;
+    const died = game.tick();
+    expect(died).toBe(false);
+    expect(game.crab.dead).toBe(false);
+    expect(game.state).toBe(STATE.RUNNING);
+  });
+
+  it('beerTimer decrements each frame', () => {
+    game.beerTimer = 100;
+    game.nextObstacle = 999;
+    game.nextCollectible = 999;
+    game.tick();
+    expect(game.beerTimer).toBe(99);
+  });
+
+  it('beerTimer does not go below 0', () => {
+    game.beerTimer = 1;
+    game.nextObstacle = 999;
+    game.nextCollectible = 999;
+    game.tick();
+    expect(game.beerTimer).toBe(0);
+    game.tick();
+    expect(game.beerTimer).toBe(0);
+  });
+
+  it('obstacles move slower during slow-mo', () => {
+    // Place obstacle at known position, tick without slow-mo
+    game.obstacles.push({
+      x: 500,
+      type: 0,
+      get rect() { return { x: this.x - 22, y: GROUND - 36, w: 36, h: 36 }; },
+    });
+    game.nextObstacle = 999;
+    game.nextCollectible = 999;
+    game.tick();
+    const normalMove = 500 - game.obstacles[0].x;
+
+    // Reset and test with slow-mo
+    const game2 = createGameState();
+    game2.handleInput();
+    game2.beerTimer = 100;
+    game2.obstacles.push({
+      x: 500,
+      type: 0,
+      get rect() { return { x: this.x - 22, y: GROUND - 36, w: 36, h: 36 }; },
+    });
+    game2.nextObstacle = 999;
+    game2.nextCollectible = 999;
+    game2.tick();
+    const slowMove = 500 - game2.obstacles[0].x;
+
+    expect(slowMove).toBeLessThan(normalMove);
+    expect(slowMove).toBeCloseTo(normalMove * BEER_SLOW_FACTOR, 1);
+  });
+
+  it('speed returns to normal when beerTimer expires', () => {
+    game.obstacles.push({
+      x: 500,
+      type: 0,
+      get rect() { return { x: this.x - 22, y: GROUND - 36, w: 36, h: 36 }; },
+    });
+    game.beerTimer = 0; // no slow-mo
+    game.nextObstacle = 999;
+    game.nextCollectible = 999;
+    const xBefore = game.obstacles[0].x;
+    game.tick();
+    const moveNormal = xBefore - game.obstacles[0].x;
+    // Should move at full speed (game.speed)
+    expect(moveNormal).toBeCloseTo(game.speed, 1);
+  });
+
+  it('reset() clears collectibles, beerTimer, and nextCollectible', () => {
+    game.collectibles.push({ x: 100 });
+    game.beerTimer = 200;
+    game.nextCollectible = 50;
+    game.reset();
+    expect(game.collectibles).toHaveLength(0);
+    expect(game.beerTimer).toBe(0);
+    expect(game.nextCollectible).toBe(200);
+  });
+
+  it('removes beer bottles that go off-screen left', () => {
+    game.collectibles.push({
+      x: -56,
+      get rect() { return getBeerRect(this.x); },
+    });
+    game.nextObstacle = 999;
+    game.nextCollectible = 999;
+    game.tick();
+    expect(game.collectibles).toHaveLength(0);
+  });
+
+  it('collecting a second beer resets the timer to full duration', () => {
+    game.beerTimer = 50; // already in slow-mo with 50 frames left
+    const crabRect = game.crab.rect;
+    game.collectibles.push({
+      x: game.crab.x,
+      get rect() {
+        return { x: crabRect.x, y: crabRect.y, w: crabRect.w, h: crabRect.h };
+      },
+    });
+    game.nextObstacle = 999;
+    game.nextCollectible = 999;
+    game.tick();
+    // beerTimer was decremented by 1 (to 49), then reset to BEER_SLOW_DURATION
+    expect(game.beerTimer).toBe(BEER_SLOW_DURATION);
   });
 });

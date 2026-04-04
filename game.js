@@ -7,6 +7,8 @@ export const INITIAL_SPEED = 5;
 export const MAX_SPEED = 14;
 export const MAX_JUMPS = 2;
 export const JUMP_VELOCITY = -12.5;
+export const BEER_SLOW_DURATION = 300; // ~5 seconds at 60fps
+export const BEER_SLOW_FACTOR = 0.4;   // speed drops to 40%
 
 // ─── State machine ───────────────────────────────────────────────────────────
 export const STATE = Object.freeze({
@@ -141,6 +143,17 @@ export function getObstacleRect(type, x, ground = GROUND) {
   }
 }
 
+// ─── Beer bottle rect (collectible) ───────────────────────────────────────
+export function getBeerRect(x, ground = GROUND) {
+  return { x: x - 9, y: ground - 40, w: 18, h: 40 };
+}
+
+// ─── Next collectible cooldown ────────────────────────────────────────────
+export function calculateNextCollectible(score) {
+  const base = 200 + Math.random() * 150 - Math.floor(score / 500) * 10;
+  return Math.max(120, base);
+}
+
 // ─── Particles ────────────────────────────────────────────────────────────────
 const PARTICLE_COLORS = ['#e94560', '#ff6b6b', '#c0392b', '#f39c12'];
 
@@ -189,17 +202,23 @@ export function createGameState(config = {}) {
     frames: 0,
     speed: INITIAL_SPEED,
     obstacles: [],
+    collectibles: [],
     particles: [],
     nextObstacle: 80,
+    nextCollectible: 200,
+    beerTimer: 0,
 
     reset() {
       this.crab.reset();
       this.obstacles.length = 0;
+      this.collectibles.length = 0;
       this.particles.length = 0;
       this.score = 0;
       this.frames = 0;
       this.speed = INITIAL_SPEED;
       this.nextObstacle = 80;
+      this.nextCollectible = 200;
+      this.beerTimer = 0;
       this.state = STATE.RUNNING;
     },
 
@@ -224,6 +243,12 @@ export function createGameState(config = {}) {
       this.score += 0.1 * (1 + this.frames / 3000);
       this.speed = calculateSpeed(this.score);
 
+      // Beer slow-motion effect
+      if (this.beerTimer > 0) this.beerTimer--;
+      const effectiveSpeed = this.beerTimer > 0
+        ? this.speed * BEER_SLOW_FACTOR
+        : this.speed;
+
       // Obstacle spawn
       this.nextObstacle--;
       if (this.nextObstacle <= 0) {
@@ -238,11 +263,23 @@ export function createGameState(config = {}) {
         this.nextObstacle = calculateNextObstacle(this.score);
       }
 
+      // Collectible spawn
+      this.nextCollectible--;
+      if (this.nextCollectible <= 0) {
+        this.collectibles.push({
+          x: CANVAS_W + 50,
+          get rect() {
+            return getBeerRect(this.x);
+          },
+        });
+        this.nextCollectible = calculateNextCollectible(this.score);
+      }
+
       // Move obstacles & check collision
       let died = false;
       for (let i = this.obstacles.length - 1; i >= 0; i--) {
         const obs = this.obstacles[i];
-        obs.x -= this.speed;
+        obs.x -= effectiveSpeed;
         if (obs.x < -60) {
           this.obstacles.splice(i, 1);
           continue;
@@ -253,6 +290,20 @@ export function createGameState(config = {}) {
           this.hiScore = Math.max(this.hiScore, Math.floor(this.score));
           this.state = STATE.DEAD;
           died = true;
+        }
+      }
+
+      // Move collectibles & check collection
+      for (let i = this.collectibles.length - 1; i >= 0; i--) {
+        const c = this.collectibles[i];
+        c.x -= effectiveSpeed;
+        if (c.x < -60) {
+          this.collectibles.splice(i, 1);
+          continue;
+        }
+        if (rectsOverlap(this.crab.rect, c.rect)) {
+          this.collectibles.splice(i, 1);
+          this.beerTimer = BEER_SLOW_DURATION;
         }
       }
 
