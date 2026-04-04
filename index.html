@@ -88,6 +88,7 @@
   import {
     CANVAS_W, CANVAS_H, GROUND, STATE,
     formatScore, createGameState, updateParticles,
+    BEER_SLOW_DURATION,
   } from './game.js';
 
   (() => {
@@ -428,6 +429,151 @@
       ctx.shadowColor = '#ff69b4';
       ctx.shadowBlur = 6;
       ctx.fillText('\uD83D\uDC18 baby!', bx + S * 10, by - 68);
+      ctx.restore();
+    }
+
+    function drawBeer(c) {
+      const anim = getAnimState(c);
+      anim.phase += 0.05;
+      const bx = c.x, by = GROUND;
+      const bob = Math.sin(anim.phase) * 2;
+
+      // Golden glow aura (signals "pickup")
+      ctx.save();
+      ctx.globalAlpha = 0.25 + Math.sin(anim.phase * 1.5) * 0.1;
+      const glow = ctx.createRadialGradient(bx, by - 20 + bob, 2, bx, by - 20 + bob, 22);
+      glow.addColorStop(0, '#ffd70066');
+      glow.addColorStop(1, '#ffd70000');
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(bx, by - 20 + bob, 22, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      // Bottle body (amber glass)
+      const bodyTop = by - 32 + bob;
+      const bodyH = 22;
+      const bodyW = 14;
+      const bottleGrad = ctx.createLinearGradient(bx - bodyW / 2, 0, bx + bodyW / 2, 0);
+      bottleGrad.addColorStop(0, '#8B4513');
+      bottleGrad.addColorStop(0.3, '#CD853F');
+      bottleGrad.addColorStop(0.5, '#DEB887');
+      bottleGrad.addColorStop(0.7, '#CD853F');
+      bottleGrad.addColorStop(1, '#8B4513');
+      ctx.fillStyle = bottleGrad;
+      ctx.beginPath();
+      ctx.roundRect(bx - bodyW / 2, bodyTop, bodyW, bodyH, 3);
+      ctx.fill();
+
+      // Bottle neck
+      const neckW = 7;
+      const neckH = 10;
+      const neckTop = bodyTop - neckH + 2;
+      ctx.fillStyle = bottleGrad;
+      ctx.beginPath();
+      ctx.roundRect(bx - neckW / 2, neckTop, neckW, neckH, [3, 3, 0, 0]);
+      ctx.fill();
+
+      // Label (white rectangle with text)
+      ctx.fillStyle = '#faf0e6';
+      ctx.beginPath();
+      ctx.roundRect(bx - 5, bodyTop + 5, 10, 10, 1);
+      ctx.fill();
+      ctx.fillStyle = '#8B4513';
+      ctx.font = 'bold 6px Courier New';
+      ctx.textAlign = 'center';
+      ctx.fillText('B', bx, bodyTop + 13);
+
+      // Cap
+      ctx.fillStyle = '#DAA520';
+      ctx.beginPath();
+      ctx.roundRect(bx - 4, neckTop - 3 , 8, 4, [2, 2, 0, 0]);
+      ctx.fill();
+
+      // Foam / bubbles on top
+      ctx.fillStyle = '#fff8dc';
+      ctx.globalAlpha = 0.85;
+      ctx.beginPath();
+      ctx.arc(bx - 3, neckTop - 4 + bob * 0.3, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(bx + 3, neckTop - 3 + bob * 0.3, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(bx, neckTop - 6 + bob * 0.3, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+
+      // Bottle bottom base
+      ctx.fillStyle = '#A0522D';
+      ctx.beginPath();
+      ctx.roundRect(bx - bodyW / 2 - 1, by - 10 + bob, bodyW + 2, 3, 1);
+      ctx.fill();
+
+      // Glass highlight
+      ctx.save();
+      ctx.globalAlpha = 0.3;
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.roundRect(bx - bodyW / 2 + 2, bodyTop + 2, 3, bodyH - 4, 1);
+      ctx.fill();
+      ctx.restore();
+
+      ctx.textAlign = 'left';
+    }
+
+    // ─── Slow-motion visual effects ──────────────────────────────────────────
+    function drawSlowMoEffect() {
+      if (game.beerTimer <= 0) return;
+
+      const t = game.beerTimer / BEER_SLOW_DURATION;
+
+      // Edge vignette tint (cyan/blue)
+      ctx.save();
+      ctx.globalAlpha = 0.12 * t;
+      const vignette = ctx.createRadialGradient(W / 2, H / 2, W * 0.25, W / 2, H / 2, W * 0.6);
+      vignette.addColorStop(0, 'transparent');
+      vignette.addColorStop(1, '#00bcd4');
+      ctx.fillStyle = vignette;
+      ctx.fillRect(0, 0, W, H);
+      ctx.restore();
+
+      // Timer bar at top of canvas
+      const barMaxW = W * 0.3;
+      const barH = 4;
+      const barX = (W - barMaxW) / 2;
+      const barY = 6;
+      const barW = barMaxW * t;
+
+      // Bar background
+      ctx.save();
+      ctx.globalAlpha = 0.3;
+      ctx.fillStyle = '#1a1a2e';
+      ctx.beginPath();
+      ctx.roundRect(barX, barY, barMaxW, barH, 2);
+      ctx.fill();
+      ctx.restore();
+
+      // Bar fill
+      ctx.save();
+      ctx.globalAlpha = 0.8;
+      const barGrad = ctx.createLinearGradient(barX, 0, barX + barW, 0);
+      barGrad.addColorStop(0, '#00bcd4');
+      barGrad.addColorStop(1, '#4dd0e1');
+      ctx.fillStyle = barGrad;
+      ctx.beginPath();
+      ctx.roundRect(barX, barY, barW, barH, 2);
+      ctx.fill();
+      ctx.restore();
+
+      // "SLOW-MO" label
+      ctx.save();
+      ctx.font = 'bold 9px Courier New';
+      ctx.fillStyle = '#4dd0e1';
+      ctx.globalAlpha = 0.6 + Math.sin(Date.now() * 0.008) * 0.2;
+      ctx.textAlign = 'center';
+      ctx.fillText('SLOW-MO', W / 2, barY + barH + 12);
+      ctx.textAlign = 'left';
       ctx.restore();
     }
 
@@ -786,8 +932,14 @@
         drawObstacle(obs);
       }
 
+      // Draw collectibles (beer bottles)
+      for (const c of game.collectibles) {
+        drawBeer(c);
+      }
+
       drawParticles();
       drawCrab();
+      drawSlowMoEffect();
       drawOverlay();
 
       // HUD
